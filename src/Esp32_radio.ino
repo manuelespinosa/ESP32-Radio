@@ -62,10 +62,11 @@
 // GPIO15           pin 2 CS            -                     -       -
 // GPI03    RXD0    -                   -                     -       Reserved serial input
 // GPIO1    TXD0    -                   -                     -       Reserved serial output
+// GPIO33   -       -                   -                     -       Rotary encoder CLK   <<<---- NEW
 // GPIO34   -       -                   -                     -       Optional pull-up resistor
 // GPIO35   -       -                   -                     -       Infrared receiver VS1838B
-// GPIO25   -       -                   -                     -       Rotary encoder CLK
-// GPIO26   -       -                   -                     -       Rotary encoder DT
+// GPIO25   -       -                   -                     -       (Rotary encoder CLK) // Internal DAC CH 1  <--- CHANGE
+// GPIO26   -       -                   -                     -       Rotary encoder DT // Internal DAC CH2 <-- CHANGE
 // GPIO27   -       -                   -                     -       Rotary encoder SW
 // -------  ------  ---------------     -------------------  ------   ----------------
 // GND      -       pin 8 GND           pin 8 GND                     Power supply GND
@@ -167,6 +168,18 @@
 //#define ILI9341                      // ILI9341 240*320
 //#define NEXTION                      // Nextion display. Uses UART 2 (pin 16 and 17)
 //
+
+#include "AudioFileSourceHTTPStream.h"
+#include "AudioFileSourceBuffer.h"
+#include "AudioGeneratorMP3.h"
+#include "AudioOutputI2S.h"
+#include "SPIFFS.h"
+
+#if !defined(INTERNAL_DAC)
+#define INTERNAL_DAC 1
+#endif
+
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <nvs.h>
@@ -223,15 +236,7 @@
 
 
 /* Audio *////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#include "AudioFileSourceHTTPStream.h"
-#include "AudioFileSourceBuffer.h"
-#include "AudioGeneratorMP3.h"
-#include "AudioOutputI2S.h"
-#include "SPIFFS.h"
 
-#if !defined(INTERNAL_DAC)
-#define INTERNAL_DAC 1
-#endif
 AudioGeneratorMP3 *mp3;
 AudioFileSourceHTTPStream  *file;
 AudioFileSourceBuffer *buff;
@@ -240,7 +245,6 @@ int buffUnderflow = 0;
 
 /* Our custom Parameters */
 char URL[261] = "http://95.211.106.167:80/europafm"; //TODO
-//String URL = "http://95.211.106.167:80/europafm"; //TODO
 
 char server_ip[128] = "95.211.106.167";
 char server_port[5] = "80";
@@ -4690,6 +4694,7 @@ void mp3loop()
 //**************************************************************************************************
 // Main loop of the program.                                                                       *
 //**************************************************************************************************
+
 void loop()
 {
   ///////////////////////////////////
@@ -4709,6 +4714,11 @@ void loop()
     Serial.printf("Fin de la pista\n");
     delay(100);
     startAudio(true);
+  }
+  if (muteflag){
+    out->SetGain(0.00);
+  }else{
+    out->SetGain(ini_block.reqvol*4/100.00);
   }
   ///////////////////////////////////
   mp3loop() ;                                       // Do mp3 related actions

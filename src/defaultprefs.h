@@ -51,7 +51,7 @@ ir_40BF = upvolume = 2
 ir_C03F = downvolume = 2
 # GPIO pinnings
 pin_ir = 35                                          # GPIO Pin number for IR receiver VS1838B
-pin_enc_clk = 25                                     # GPIO Pin number for rotary encoder "CLK"
+pin_enc_clk = 33                                     # GPIO Pin number for rotary encoder "CLK" (WAS 25)
 pin_enc_dt = 26                                      # GPIO Pin number for rotary encoder "DT"
 pin_enc_sw = 27                                      # GPIO Pin number for rotary encoder "SW"
 #
