@@ -167,6 +167,8 @@
 //#define ILI9341                      // ILI9341 240*320
 //#define NEXTION                      // Nextion display. Uses UART 2 (pin 16 and 17)
 //
+#include <Arduino.h>
+#include <Wire.h>
 #include <nvs.h>
 #include <PubSubClient.h>
 #include <WiFiMulti.h>
@@ -217,6 +219,50 @@
 #define MQTT_SUBTOPIC     "command"           // Command to receive from MQTT
 //
 #define otaclient mp3client                   // OTA uses mp3client for connection to host
+
+
+
+/* Audio *////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#include "AudioFileSourceHTTPStream.h"
+#include "AudioFileSourceBuffer.h"
+#include "AudioGeneratorMP3.h"
+#include "AudioOutputI2S.h"
+
+#if !defined(INTERNAL_DAC)
+#define INTERNAL_DAC 1
+#endif
+AudioGeneratorMP3 *mp3;
+AudioFileSourceHTTPStream  *file;
+AudioFileSourceBuffer *buff;
+AudioOutputI2S *out;
+int buffUnderflow = 0;
+
+/* Our custom Parameters */
+char URL[261] = "http://95.211.106.167:80/europafm"; //TODO
+//String URL = "http://95.211.106.167:80/europafm"; //TODO
+
+char server_ip[128] = "95.211.106.167";
+char server_port[5] = "80";
+char server_path[128] = "/europafm";
+void setMp3URL() {
+  String s = "http://" + String(server_ip) + (strlen(server_port) > 0 ? ":" + String(server_port) : "") + (strlen(server_path) > 0 ? String(server_path) : "");
+  strcpy(URL, s.c_str());
+}
+
+const int preallocateBufferSize = 5*1024; //5 * 1024;
+const int preallocateCodecSize = 29192; //29192; // MP3 codec max mem needed
+void *preallocateBuffer = NULL;
+void *preallocateCodec = NULL;
+bool useBuff = false;
+bool buffReserved = false;
+bool codecReserved = false;
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 
 //**************************************************************************************************
 // Forward declaration and prototypes of various functions.                                        *
@@ -523,6 +569,60 @@ touchpin_struct   touchpin[] =                           // Touch pins and progr
   {  -1, false, false, "", false, 0 }                    // End of list
   // End of table
 } ;
+
+
+
+///////// MI FUNCION
+
+
+void startAudio(bool del = false) {
+  //delay(100);
+  if (del) {
+    delete mp3;
+    //delete out;
+    delete buff;
+    delete file;
+    //delay(50);
+    if (useBuff && buffUnderflow >= 5) {
+      useBuff = false;
+      free(preallocateBuffer);
+      buffReserved = false;
+    }
+  }
+  if (useBuff && !buffReserved) {
+    buffReserved = true;
+    preallocateBuffer = malloc(preallocateBufferSize);
+  }
+  if (!codecReserved) {
+    codecReserved = true;
+    preallocateCodec = malloc(preallocateCodecSize);
+  }
+  Serial.println(URL);
+  file = new AudioFileSourceHTTPStream(URL);
+  if (useBuff) {
+    buff = new AudioFileSourceBuffer(file, 2048);
+  }
+#ifdef ESP32
+  out = new AudioOutputI2S(0, INTERNAL_DAC);
+#else
+  out = new AudioOutputI2S();
+#endif
+  out->SetGain(0.2); // 0 - 4, 0.3 lower values reduce crackle
+  out->SetRate(44100);
+  out->SetBitsPerSample(16);
+  out->SetChannels(2);
+  mp3 =  new AudioGeneratorMP3(preallocateCodec, preallocateCodecSize);;
+  //mp3->RegisterStatusCB(StatusCallback, (void*)"mp3");
+  if (useBuff) {
+    mp3->begin(buff, out);
+  } else {
+    mp3->begin(file, out);
+  }
+}
+
+
+
+
 
 
 //**************************************************************************************************
@@ -2586,11 +2686,11 @@ void update_software ( const char* lstmodkey, const char* updatehost, const char
         return ;
       }
     }
-    scan_content_length ( line.c_str() ) ;                      // Scan for content_length
+    /*scan_content_length ( line.c_str() ) ;                      // Scan for content_length
     if ( line.startsWith ( "Last-Modified: " ) )                // Timestamp of binary file
     {
       newlstmod = line.substring ( 15 ) ;                       // Isolate timestamp
-    }
+    }*/
   }
   // End of headers reached
   if ( newlstmod == lstmod )                                    // Need for update?
@@ -3736,6 +3836,11 @@ void setup()
     NULL,                                                 // parameter of the task
     1,                                                    // priority of the task
     &xspftask ) ;                                         // Task handle to keep track of created task
+
+  /***********************************************************/
+    startAudio();
+
+
 }
 
 
@@ -4586,6 +4691,25 @@ void mp3loop()
 //**************************************************************************************************
 void loop()
 {
+  ///////////////////////////////////
+  char tmpURL[261] = "";
+  String("http://"+host).toCharArray(tmpURL, 261); // Convert string to char*
+  if (strcmp(URL,tmpURL)){
+    Serial.println("La URL ha cambiado");
+    strncpy(URL, tmpURL, sizeof (URL));
+    mp3->stop();
+    startAudio(true);
+  }
+  if (mp3->isRunning()){
+    if (!mp3->loop()) {
+      mp3->stop();
+    }
+  }else {
+    Serial.printf("Fin de la pista\n");
+    delay(100);
+    startAudio(true);
+  }
+  ///////////////////////////////////
   mp3loop() ;                                       // Do mp3 related actions
   if ( updatereq )                                  // Software update requested?
   {
